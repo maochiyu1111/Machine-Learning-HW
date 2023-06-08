@@ -1,4 +1,4 @@
-# HW01  COVID-19 Cases Prediction（regression）
+# HW01  COVID-19 Cases Prediction
 
 > Objectives:
 >
@@ -45,6 +45,10 @@
   ```
 
 <img src="assets/image-20230531190005821.png" alt="image-20230531190005821" style="zoom:50%;" />
+
+
+
+
 
 
 
@@ -129,6 +133,8 @@
 - 总之对DNN解决分类问题有了大致认知，同时该模型参数较多，约200万。若无脑再叠epoch和hidden layer的dim可能会有更好地结果。（kaggle 提供的ram 爆了
 
 <img src="assets/image-20230531190214850.png" alt="image-20230531190214850" style="zoom:50%;" />
+
+
 
 
 
@@ -230,3 +236,74 @@
 - 使用k - fold cross  validation \+ Ensemble 可以提高模型的稳定性。此HW中我使用了4折，train出了4个model，最终是使用的简易的vote机制来确定结果。由于模型对每个样本给出的一个概率分布序列，我采取的是将4个分布叠加起来后再取分布中的最大值当做prediction。最后的结果并不理想，在于每个model的结果都较差，ensemble并没有得到很好的体现，但是由于train的时间太长了，只跑了15个epoch就要2h，4-fold 就是4倍的时间。最终放弃刷榜。
 
   <img src="assets/image-20230608144511793.png" alt="image-20230608144511793" style="zoom:50%;" />
+
+
+
+
+
+
+
+# HW04 Speaker Identification
+
+> Objectives:
+>
+> 1. Know how to use Transformer.
+> 2. Predict speaker class from given speech
+
+- HW04 也是一个分类，通过大量处理后的音频对600个speaker进行分类。由于在输入时会处理一段连续的语音，这里就使用到了transformer的encoder部分，output部分还是分类
+
+
+
+- model部分如下：
+
+  ```python
+  class Classifier(nn.Module):
+  	def __init__(self, d_model=224, n_spks=600, dropout=0.2):
+  		super().__init__()
+  		# Project the dimension of features from that of input into d_model.
+  		self.prenet = nn.Linear(40, d_model)
+  		self.encoder_layer = nn.TransformerEncoderLayer(
+  			d_model=d_model, dim_feedforward=448, nhead=2, dropout=dropout
+  		)
+  		self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=3)
+  		# Project the the dimension of features from d_model into speaker nums.
+  		self.pred_layer = nn.Sequential(
+              nn.BatchNorm1d(d_model),
+  			nn.Linear(d_model, d_model),
+  			nn.ReLU(),
+  			nn.Linear(d_model, n_spks),
+  		)
+  
+  	def forward(self, mels):
+  		"""
+  		args:
+  			mels: (batch size, length, 40)
+  		return:
+  			out: (batch size, n_spks)
+  		"""
+  		# out: (batch size, length, d_model)
+  		out = self.prenet(mels)
+  		# out: (length, batch size, d_model)
+  		out = out.permute(1, 0, 2)
+  		# The encoder layer expect features in the shape of (length, batch size, d_model).
+  		out = self.encoder(out)
+  		# out: (batch size, length, d_model)
+  		out = out.transpose(0, 1)
+  		# mean pooling
+  		stats = out.mean(dim=1)
+  		# out: (batch, n_spks)
+  		out = self.pred_layer(stats)
+  		return out
+  ```
+
+  输入的语音信号经过一个预处理网络（prenet）得到一个特征矩阵，其中包含了语音信号的频谱信息。接着，将特征矩阵转置成编码器（encoder）期望的形状（即长度、批次和特征维度的顺序），并将其输入到编码器中。编码器将特征矩阵转换为一个上下文向量序列，其中每个上下文向量都包含了输入序列中一个位置的信息。然后，将上下文向量序列再次转置回原来的顺序，并对每个批次中的所有上下文向量进行 mean pooling，得到一个表示整个语音信号的统计量。最后，将这个统计量输入到一个FC layer中，得到预测的speaker label。
+
+
+
+- 课程给出了优化思路，包括将transformer改成conformer（结合CNN），对pooling技术继续更改等等，我在HW04中只实现了基本的transformer model，并进行了一些调参。 最终结果如图
+
+
+
+# HW05 Machine Translation
+
+<img src="assets/image-20230608214150989.png" alt="image-20230608214150989" style="zoom:50%;" />
