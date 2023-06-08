@@ -1,4 +1,4 @@
-# HW1  COVID-19 Cases Prediction（regression）
+# HW01  COVID-19 Cases Prediction（regression）
 
 > Objectives:
 >
@@ -48,7 +48,7 @@
 
 
 
-# HW2 Phoneme Classification
+# HW02 Phoneme Classification
 
 > Objectives:
 >
@@ -134,5 +134,99 @@
 
 
 
+# HW03 Image Classification
 
+> Objectives:
+>
+> 1. Use CNN for image classification.
+> 2. Implement data augmentation
+> 3. Visualize the learned visual representations of the CNN model on the validation set by implementing t-SNE
+> 4. Implement Cross Validation \+ Ensemble
 
+- 将事物的图片分成十一类，使用CNN模型
+
+  ```python
+  class Classifier(nn.Module):
+     def __init__(self):
+         super(Classifier, self).__init__()
+         # torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+         # torch.nn.MaxPool2d(kernel_size, stride, padding)
+         # input 維度 [3, 128, 128]
+         self.cnn = nn.Sequential(
+             nn.Conv2d(3, 64, 3, 1, 1),  # [64, 128, 128] 其中3,1,1分别指的kernel大小，stride，padding
+             nn.BatchNorm2d(64),
+             nn.ReLU(),
+             nn.MaxPool2d(2, 2, 0),      # [64, 64, 64] 
+            
+  
+             nn.Conv2d(64, 128, 3, 1, 1), # [128, 64, 64]
+             nn.BatchNorm2d(128),
+             nn.ReLU(),
+             nn.MaxPool2d(2, 2, 0),      # [128, 32, 32]
+           
+             nn.Conv2d(128, 256, 3, 1, 1), # [256, 32, 32]
+             nn.BatchNorm2d(256),
+             nn.ReLU(),
+             nn.MaxPool2d(2, 2, 0),      # [256, 16, 16]
+  
+             nn.Conv2d(256, 512, 3, 1, 1), # [512, 16, 16]
+             nn.BatchNorm2d(512),
+             nn.ReLU(),
+             nn.MaxPool2d(2, 2, 0),       # [512, 8, 8]
+             
+             nn.Conv2d(512, 512, 3, 1, 1), # [512, 8, 8]
+             nn.BatchNorm2d(512),
+             nn.ReLU(),  
+             nn.MaxPool2d(2, 2, 0),       # [512, 4, 4]
+         )
+         self.fc = nn.Sequential(
+             nn.Dropout(0.4),
+             nn.Linear(512*4*4, 1024),
+             nn.ReLU(),
+             nn.Linear(1024, 512),
+             nn.ReLU(),
+             nn.Linear(512, 11)
+         )
+  
+     def forward(self, x):
+         out = self.cnn(x)
+         out = out.view(out.size()[0], -1)
+         return self.fc(out)
+  ```
+
+  
+
+- 通过 `torchvision.transforms` 实现data augmentation
+
+  ```python
+  train_tfm = transforms.Compose([
+      transforms.Resize((128, 128)),
+      transforms.RandomHorizontalFlip(0.5),
+      transforms.RandomVerticalFlip(0.5),
+      transforms.RandomRotation(50),
+      transforms.GaussianBlur(3, 0.1),
+      transforms.ColorJitter(brightness=0.5, hue=0.3),
+      transforms.ToTensor(),
+      # ToTensor() should be the last one of the transforms.
+  ])
+  ```
+
+  [ CSDN：torchvision.transforms 常用方法解析](https://blog.csdn.net/weixin_42426841/article/details/129903800)
+
+  augmentation效果：<img src="assets/image-20230608143505567.png" alt="image-20230608143505567" style="zoom:50%;" />
+
+- 通过t-SNE降维可视化解释模型分类效果
+
+  **top层（FC层前的最后一层）**
+
+  <img src="assets/image-20230608133750969.png" alt="image-20230608133750969" style="zoom:50%;" />
+
+  **mid层（CNN中的中间层）**
+
+  <img src="assets/image-20230608135838540.png" alt="image-20230608135838540" style="zoom:50%;" />
+
+  可见top layer 比 mid layer 的分类效果明显很多，top层中，相同颜色的点代表相同类的样本，冒险可以看出有聚集的趋势，并且可以通过两类样本或个别样本的距离解释相似程度。
+
+- 使用k - fold cross  validation \+ Ensemble 可以提高模型的稳定性。此HW中我使用了4折，train出了4个model，最终是使用的简易的vote机制来确定结果。由于模型对每个样本给出的一个概率分布序列，我采取的是将4个分布叠加起来后再取分布中的最大值当做prediction。最后的结果并不理想，在于每个model的结果都较差，ensemble并没有得到很好的体现，但是由于train的时间太长了，只跑了15个epoch就要2h，4-fold 就是4倍的时间。最终放弃刷榜。
+
+  <img src="assets/image-20230608144511793.png" alt="image-20230608144511793" style="zoom:50%;" />
