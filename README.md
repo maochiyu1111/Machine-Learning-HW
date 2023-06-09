@@ -302,8 +302,143 @@
 
 - 课程给出了优化思路，包括将transformer改成conformer（结合CNN），对pooling技术继续更改等等，我在HW04中只实现了基本的transformer model，并进行了一些调参。 最终结果如图
 
+  <img src="assets/image-20230609135556983.png" alt="image-20230609135556983" style="zoom:50%;" />
+
 
 
 # HW05 Machine Translation
 
+> Objectives:
+>
+> 1. English to Chinese (Traditional) Translation
+>    - Input: an English sentence  (e.g. tom is a student .)
+>    - Output: the Chinese translation  (e.g. 湯姆 是 個 學生 。)
+> 2. Train a transformer seq2seq to achieve translation 
+> 3. Adopt warm-up learning rate schedule
+- 本HW资料来自ted2020演讲中英字母对照，在train的前期有大量的数据预处理的工作，并且依赖 `fairseq` package
+
+- 采用 transformer 的 seq2seq model 架构如下
+
+  ```python
+  class Seq2Seq(FairseqEncoderDecoderModel):
+      def __init__(self, args, encoder, decoder):
+          super().__init__(encoder, decoder)
+          self.args = args
+      
+      def forward(
+          self,
+          src_tokens,
+          src_lengths,
+          prev_output_tokens,
+          return_all_hiddens: bool = True,
+      ):
+          """
+          Run the forward pass for an encoder-decoder model.
+          """
+          encoder_out = self.encoder(
+              src_tokens, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens
+          )
+          logits, extra = self.decoder(
+              prev_output_tokens,
+              encoder_out=encoder_out,
+              src_lengths=src_lengths,
+              return_all_hiddens=return_all_hiddens,
+          )
+          return logits, extra
+  ```
+
+- model Initialization 过程如下，其中关键的 `TransformerEncoder & TransformerDecoder ` 都是直接导入的
+
+  ```python
+  from fairseq.models.transformer import (
+      TransformerEncoder, 
+      TransformerDecoder,
+  )
+  
+  def build_model(args, task):
+      """ build a model instance based on hyperparameters """
+      src_dict, tgt_dict = task.source_dictionary, task.target_dictionary
+  
+      # token embeddings
+      encoder_embed_tokens = nn.Embedding(len(src_dict), args.encoder_embed_dim, src_dict.pad())
+      decoder_embed_tokens = nn.Embedding(len(tgt_dict), args.decoder_embed_dim, tgt_dict.pad())
+      
+      # encoder decoder
+      encoder = TransformerEncoder(args, src_dict, encoder_embed_tokens)
+      decoder = TransformerDecoder(args, tgt_dict, decoder_embed_tokens)
+  
+      # sequence to sequence model
+      model = Seq2Seq(args, encoder, decoder)
+      
+      # initialization for seq2seq model is important, requires extra handling
+      def init_params(module):
+          from fairseq.modules import MultiheadAttention
+          if isinstance(module, nn.Linear):
+              module.weight.data.normal_(mean=0.0, std=0.02)
+              if module.bias is not None:
+                  module.bias.data.zero_()
+          if isinstance(module, nn.Embedding):
+              module.weight.data.normal_(mean=0.0, std=0.02)
+              if module.padding_idx is not None:
+                  module.weight.data[module.padding_idx].zero_()
+          if isinstance(module, MultiheadAttention):
+              module.q_proj.weight.data.normal_(mean=0.0, std=0.02)
+              module.k_proj.weight.data.normal_(mean=0.0, std=0.02)
+              module.v_proj.weight.data.normal_(mean=0.0, std=0.02)
+          if isinstance(module, nn.RNNBase):
+              for name, param in module.named_parameters():
+                  if "weight" in name or "bias" in name:
+                      param.data.uniform_(-0.1, 0.1)
+              
+      # weight initialization
+      model.apply(init_params)
+      return model
+  ```
+
+  
+
+- 研究证明，warm-up learning rate schedule 对于 train transformer model 有较好的表现
+
+  ```python
+  def get_rate(d_model, step_num, warmup_step):
+      # TODO: Change lr from constant to the equation shown above
+      lr = (d_model**(-0.5)) * min(step_num**(-0.5), step_num*(warmup_step**(-1.5)))
+      return lr
+  ```
+
 <img src="assets/image-20230608214150989.png" alt="image-20230608214150989" style="zoom:50%;" />
+
+
+
+- 翻译结果展示
+
+  ```
+  en:Just to give you a hint of that, let's look back at that OECD graph that we were talking about.
+  my model zh:給你一個暗示 , 讓我們回頭看看我們剛剛提到的oecd圖表 。
+  google zh:只是為了給你一點暗示，讓我們回顧一下我們正在談論的經合組織圖表。
+  
+  en:We need a framework to learn how to be more mindful.
+  my model zh:我們需要一個架構來學習如何更謹慎 。
+  google zh:我們需要一個框架來學習如何更加專注。
+  
+  en:And switching to a new Republican Calendar with ten-day weeks reduced church power by eliminating Sundays.
+  my model zh:換到新共和黨的日曆 , 週日的十天 , 透過消除教堂權力 , 減少了教堂權力 。
+  google zh:並改用新的共和黨曆法，每週十天，通過取消星期日來削弱教會的權力。
+  
+  en:Now it turns out, we are extremely stereotypical.
+  my model zh:結果發現 , 我們是非常刻板印象的 
+  google zh:現在事實證明，我們非常刻板。
+  
+  en:So we'd really want to see the Panama leaks, this huge peek into the offshore world, be used as a way of opening up in the US and around the world.
+  my model zh:所以, 我們真的很想看到巴拿馬漏洞, 這個巨大的peek進入海外世界, 被用來當作一種在美國和世界各地開放的方式。
+  google zh:所以我們真的很想看到巴拿馬洩密事件，這種對離岸世界的巨大窺視，被用作在美國和世界各地開放的一種方式。
+  
+  en:It seems only a few hundred of them have been shared with journalists so far.
+  my model zh:目前為止 , 只有幾百名記者和記者分享 。
+  google zh:到目前為止，似乎只有幾百個已與記者分享。
+  ```
+
+  可以看到机翻效果还是很不错的，第一句中 `OECD` 或许是因为没有足够多的语料没翻译出来，在遇到一些复杂句型比如第三句时，该model就表现较差。第四句就更加困难，peek是生僻意，且原句带有修辞，该model就表现较差。第五句中的them无上下文关联，被，model 推测为记者。
+
+
+
