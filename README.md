@@ -306,6 +306,10 @@
 
 
 
+
+
+
+
 # HW05 Machine Translation
 
 > Objectives:
@@ -442,3 +446,52 @@
 
 
 
+
+
+
+
+# HW06 Anime Face Generation（GAN）
+
+> Objectives:
+> 
+> 1. Anime Face Generation by GAN（Generative Adversarial Networks）
+> 2. Learn the training process of GAN
+> 3. Use variant WGAN-GP
+> 
+
+- GAN由两个神经网络组成：Generator和Discriminator。Generator用于根据一个随机噪声生成一个假样本（即生成出来的样本），Discriminator则用于区分真假样本（即区分出生成出来的样本）。两个网络通过不断博弈的方式进行训练，Generator的目标是生成越来越逼真的假样本，Discriminator的目标是越来越准确地区分真假样本。最终，Generator可以生成非常逼真的假样本，Discriminator也变得越来越难以区分真假样本。类似生物学中的协同进化
+
+- 在实现Model时，Generator输入一定维度的噪声，输出是一个照片向量，Generator核心是反卷积层。Discriminator则可以约等于一个分类器。
+
+  - 卷积层通过将卷积核应用于输入图像来提取特征，而反卷积层则通过将卷积核的转置应用于输入来将特征图扩展为更大的图像。反卷积层通常使用 `nn.ConvTranspose2d()` 函数进行定义。
+
+- 在训练时，我们一般先训练Discriminator再训练Generator，且一般更新Discriminator $k$ 次后再去更新Generator。
+
+- GAN存在着训练困难、Generator和Discriminator的loss无法指示训练进程、生成样本缺乏多样性等问题。WGAN实现了
+
+  - 彻底解决GAN训练不稳定的问题，不再需要小心平衡Generator和Discriminator的训练程度
+  - 基本解决了collapse mode的问题，确保了生成样本的多样性
+  - 训练过程中终于有一个像交叉熵、准确率这样的数值（Wasserstein距离）来指示训练的进程，这个数值越小代表GAN训练得越好，代表生成器产生的图像质量越高
+  - WGAN-GP在原有的WGAN中加入了梯度惩罚（Gradient Penalty）的方法，即在Wasserstein距离的基础上，加入了一个惩罚项，强制要求判别器的梯度在一定范围内。这样可以使得判别器更加平滑，避免出现梯度爆炸或消失的情况，同时也可以避免Collapse mode的出现。
+
+- 以下是生成结果
+
+  <img src="assets/image-20230625223603043.png" alt="image-20230625223603043" style="zoom:50%;" />
+
+  从 `epoch1` 到 `epoch14` ，逐渐从噪声生成出人脸轮廓，图片中的噪点仍然十分明显
+
+  <img src="assets/image-20230625223633899.png" alt="image-20230625223633899" style="zoom:50%;" />
+
+  从 `epoch16 ` 到 `epoch 21` ，图片的色彩逐渐稳定，噪点开始减少
+
+  <img src="assets/image-20230625223710674.png" alt="image-20230625223710674" style="zoom:50%;" />
+
+  从 `epoch25` 到 `epoch 50` 噪点逐渐减少，动画人物的无关逐渐合理，到 `epoch100` 时，人脸的五官已基本正常
+
+# HW06 Anime Face Generation（Diffusion）
+
+
+
+
+
+# HW07 BERT Question Answering
